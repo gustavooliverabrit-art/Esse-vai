@@ -1,0 +1,61 @@
+name: RDP-128GB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pc-virtual:
+    # Usa uma instância grande para tentar maximizar RAM/CPU
+    runs-on: windows-latest
+    timeout-minutes: 10080 # 7 dias
+
+    steps:
+      - name: Instalar AnyDesk e mostrar ID e senha
+        timeout-minutes: 15
+        run: |
+          $chars = "abcdefghjkmnpqrstuvwxyz23456789".ToCharArray()
+          $pw = "Ab3-" + (-join ($chars | Get-Random -Count 10))
+
+          $ad = "C:\AnyDesk\AnyDesk.exe"
+          Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile "$env:TEMP\AnyDesk.exe"
+          Start-Process "$env:TEMP\AnyDesk.exe" -ArgumentList "--install C:\AnyDesk --start-with-win --silent"
+
+          for ($i = 0; $i -lt 40 -and -not (Test-Path $ad); $i++) { Start-Sleep -Seconds 3 }
+          if (-not (Test-Path $ad)) {
+              Write-Error "AnyDesk nao foi instalado"
+              exit 1
+          }
+          Start-Sleep -Seconds 15
+
+          cmd /c "echo $pw | ""$ad"" --set-password"
+          Start-Sleep -Seconds 5
+
+          $id = ""
+          for ($i = 0; $i -lt 12 -and -not $id; $i++) {
+              $id = (& $ad --get-id | Out-String).Trim()
+              if (-not $id) { Start-Sleep -Seconds 5 }
+          }
+          if (-not $id) {
+              Write-Error "Nao consegui obter o ID do AnyDesk"
+              exit 1
+          }
+
+          # Verifica a RAM disponível
+          $ram = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+          $ramGB = [math]::Round($ram / 1GB, 2)
+
+          Write-Host ""
+          Write-Host "=============================="
+          Write-Host "ID:    $id"
+          Write-Host "SENHA: $pw"
+          Write-Host "RAM:   $ramGB GB"
+          Write-Host "CPU:   $(Get-CimInstance Win32_Processor).NumberOfCores cores"
+          Write-Host "=============================="
+
+      - name: Manter ativo por 7 dias
+        run: |
+          $end = (Get-Date).AddDays(7)
+          while ((Get-Date) -lt $end) { Start-Sleep -Seconds 60 }
